@@ -1,7 +1,7 @@
 import NIO
 
 public protocol NIODMXUniverseDelegate {
-    func didReceivePacket(_ packet: SACNPacket)
+    func didReceivePacket(on universe: NIODMXUniverse, _ packet: SACNPacket)
 }
 
 public class NIODMXUniverse{
@@ -9,6 +9,7 @@ public class NIODMXUniverse{
     let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
     let bootstrap: DatagramBootstrap
     let channel: Channel
+    public let number: DMXUniverseNumber
 
     private var currentHandler: NIODMXUniverseDelegateHandler?
 
@@ -21,11 +22,15 @@ public class NIODMXUniverse{
         guard let newDelegate = delegate else { return }
 
         let newHandler = NIODMXUniverseDelegateHandler(delegate: newDelegate)
+        newHandler.universe = self
+
         try self.channel.pipeline.add(handler: newHandler).wait()
         self.currentHandler = newHandler
     }
 
     public init(universe: DMXUniverseNumber, on interface: ACNIOInterface? = nil, port: UInt16 = E131_DEFAULT_PORT) throws {
+
+        self.number = universe
 
         self.bootstrap = DatagramBootstrap(group: self.group)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
@@ -113,6 +118,7 @@ class NIODMXUniverseDelegateHandler: ChannelInboundHandler {
     typealias InboundIn = SACNPacket
 
     let delegate: NIODMXUniverseDelegate
+    weak var universe: NIODMXUniverse?
 
     init(delegate: NIODMXUniverseDelegate){
         self.delegate = delegate
@@ -120,6 +126,7 @@ class NIODMXUniverseDelegateHandler: ChannelInboundHandler {
 
     func channelRead(ctx: ChannelHandlerContext, data: NIOAny) {
         let unwrapped = self.unwrapInboundIn(data)
-        self.delegate.didReceivePacket(unwrapped)
+        guard let universe = self.universe else { return }
+        self.delegate.didReceivePacket(on: universe, unwrapped)
     }
 }
