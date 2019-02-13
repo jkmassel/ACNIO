@@ -4,33 +4,66 @@ public protocol NIODMXUniverseDelegate {
     func didReceivePacket(on universe: NIODMXUniverse, _ packet: SACNPacket)
 }
 
+public typealias PortNumber = UInt16
+
 public class NIODMXUniverse{
 
     let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
     let bootstrap: DatagramBootstrap
-    let channel: Channel
+    private var channel: Channel?
+
     public let number: DMXUniverseNumber
+    public let port: PortNumber
+    public let interface: ACNIOInterface?
 
     private var currentHandler: NIODMXUniverseDelegateHandler?
+    private var currentDelegate: NIODMXUniverseDelegate?
 
-    public func setDelegate(_ delegate: NIODMXUniverseDelegate?) throws {
+    public func setDelegate(_ delegate: NIODMXUniverseDelegate?, on eventLoop: EventLoop) -> EventLoopFuture<Void> {
 
-        if let current = self.currentHandler {
-            _ = try self.channel.pipeline.remove(handler: current).wait()
+        let emptyPromise = eventLoop.newSucceededFuture(result: Void())
+
+        guard let channel = channel else {
+            return eventLoop.newSucceededFuture(result: Void())
         }
 
-        guard let newDelegate = delegate else { return }
+        return self.removeCurrentDelegate(on: eventLoop)
+            .then{
 
-        let newHandler = NIODMXUniverseDelegateHandler(delegate: newDelegate)
-        newHandler.universe = self
+                guard let newDelegate = delegate else {
+                    return emptyPromise
+                }
 
-        try self.channel.pipeline.add(handler: newHandler).wait()
-        self.currentHandler = newHandler
+                let newHandler = NIODMXUniverseDelegateHandler(delegate: newDelegate)
+                newHandler.universe = self
+
+                return channel.pipeline.add(handler: newHandler)
+        }
     }
 
-    public init(universe: DMXUniverseNumber, on interface: ACNIOInterface? = nil, port: UInt16 = E131_DEFAULT_PORT) throws {
+    private func removeCurrentDelegate(on eventLoop: EventLoop) -> EventLoopFuture<Void> {
+
+        self.currentHandler = nil
+
+        let emptyPromise = eventLoop.newSucceededFuture(result: Void())
+
+        guard let channel = self.channel else {
+            return emptyPromise
+        }
+
+        if let current = self.currentHandler {
+            return channel.pipeline.remove(handler: current)
+                .then{ _ in return emptyPromise }
+        }
+
+        return emptyPromise
+    }
+
+    private init(universe: DMXUniverseNumber, on interface: ACNIOInterface? = nil, port: PortNumber = E131_DEFAULT_PORT) {
 
         self.number = universe
+        self.interface = interface
+        self.port = port
 
         self.bootstrap = DatagramBootstrap(group: self.group)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
@@ -42,16 +75,28 @@ public class NIODMXUniverse{
                 // resolves to both IPv4 and IPv6 addresses, cf. Happy Eyeballs).
                 channel.pipeline.add(handler: NIODMXUniverseChannelHandler())
         }
+    }
 
-        let multicastGroup = try SocketAddress(ipAddress: universe.ipAddress, port: port)
-        debugPrint("Joining Multicast Group for \(universe.ipAddress):\(port)")
-        self.channel = try bootstrap.bind(to: SocketAddress(ipAddress: "0.0.0.0", port: port))
+    public static func connect(to universe: DMXUniverseNumber, on interface: ACNIOInterface? = nil, port: PortNumber = E131_DEFAULT_PORT) throws -> EventLoopFuture<NIODMXUniverse> {
+
+        let universe = NIODMXUniverse(universe: universe, on: interface, port: port)
+
+        return try universe.connect().then { channel -> EventLoopFuture<NIODMXUniverse> in
+            return channel.eventLoop.newSucceededFuture(result: universe)
+        }
+    }
+
+    fileprivate func connect() throws -> EventLoopFuture<Channel> {
+
+        let multicastGroup = try SocketAddress(ipAddress: self.number.ipAddress, port: port)
+
+        return try bootstrap.bind(to: SocketAddress(ipAddress: "0.0.0.0", port: port))
             .then { channel -> EventLoopFuture<Channel> in
                 let channel = channel as! MulticastChannel
                 return channel.joinGroup(multicastGroup).map{ channel }
             }
             .then { channel -> EventLoopFuture<Channel> in
-                guard let targetInterface = interface else {
+                guard let targetInterface = self.interface else {
                     return channel.eventLoop.newSucceededFuture(result: channel)
                 }
 
@@ -66,17 +111,18 @@ public class NIODMXUniverse{
                     preconditionFailure("Should not be possible to create a multicast socket on a unix domain socket")
                 }
             }
-            .wait()
-
-        debugPrint("=== BOUND!!!")
+            .then{
+                self.channel = $0
+                return $0.eventLoop.newSucceededFuture(result: $0)
+        }
     }
 
     public func close() throws {
-        try self.channel.close(mode: .all).wait()
+        try self.channel?.close(mode: .all).wait()
     }
 
     public func waitUntilClosed() throws {
-        try self.channel.closeFuture.wait()
+        try self.channel?.closeFuture.wait()
     }
 }
 
