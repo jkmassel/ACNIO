@@ -10,7 +10,7 @@ public class NIODMXUniverse{
 
     let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
     let bootstrap: DatagramBootstrap
-    private var channel: Channel?
+    private var channel: Channel!
 
     public let number: DMXUniverseNumber
     public let port: PortNumber
@@ -38,7 +38,7 @@ public class NIODMXUniverse{
                 newHandler.universe = self
 
                 return channel.pipeline.add(handler: newHandler)
-        }
+            }
     }
 
     private func removeCurrentDelegate(on eventLoop: EventLoop) -> EventLoopFuture<Void> {
@@ -77,48 +77,55 @@ public class NIODMXUniverse{
         }
     }
 
-    public static func connect(to universe: DMXUniverseNumber, on interface: ACNIOInterface? = nil, port: PortNumber = E131_DEFAULT_PORT) throws -> EventLoopFuture<NIODMXUniverse> {
+    public static func connect(to universe: DMXUniverseNumber, withEventLoop eventLoop: EventLoop, on interface: ACNIOInterface? = nil, port: PortNumber = E131_DEFAULT_PORT) -> EventLoopFuture<NIODMXUniverse> {
 
         let universe = NIODMXUniverse(universe: universe, on: interface, port: port)
 
-        return try universe.connect().then { channel -> EventLoopFuture<NIODMXUniverse> in
-            return channel.eventLoop.newSucceededFuture(result: universe)
+        return universe.connect(on: eventLoop)
+            .then { channel -> EventLoopFuture<NIODMXUniverse> in
+                return eventLoop.newSucceededFuture(result: universe)
+            }
+    }
+
+    fileprivate func connect(on eventLoop: EventLoop) -> EventLoopFuture<Channel> {
+
+        do {
+            let multicastGroup = try SocketAddress(ipAddress: self.number.ipAddress, port: port)
+
+            return try bootstrap.bind(to: SocketAddress(ipAddress: "0.0.0.0", port: port))
+                .hopTo(eventLoop: eventLoop)
+                .then { channel -> EventLoopFuture<Channel> in
+                    let channel = channel as! MulticastChannel
+                    return channel.joinGroup(multicastGroup).map{ channel }
+                }
+                .then { channel -> EventLoopFuture<Channel> in
+                    guard let targetInterface = self.interface else {
+                        return channel.eventLoop.newSucceededFuture(result: channel)
+                    }
+
+                    let provider = channel as! SocketOptionProvider
+
+                    switch targetInterface.interface.address {
+                    case .v4(let addr):
+                        return provider.setIPMulticastIF(addr.address.sin_addr).map { channel }
+                    case .v6:
+                        return provider.setIPv6MulticastIF(CUnsignedInt(targetInterface.interface.interfaceIndex)).map { channel }
+                    case .unixDomainSocket:
+                        preconditionFailure("Should not be possible to create a multicast socket on a unix domain socket")
+                    }
+                }
+                .then{
+                    self.channel = $0
+                    return $0.eventLoop.newSucceededFuture(result: $0)
+            }
+        }
+        catch let err {
+            return eventLoop.newFailedFuture(error: err)
         }
     }
 
-    fileprivate func connect() throws -> EventLoopFuture<Channel> {
-
-        let multicastGroup = try SocketAddress(ipAddress: self.number.ipAddress, port: port)
-
-        return try bootstrap.bind(to: SocketAddress(ipAddress: "0.0.0.0", port: port))
-            .then { channel -> EventLoopFuture<Channel> in
-                let channel = channel as! MulticastChannel
-                return channel.joinGroup(multicastGroup).map{ channel }
-            }
-            .then { channel -> EventLoopFuture<Channel> in
-                guard let targetInterface = self.interface else {
-                    return channel.eventLoop.newSucceededFuture(result: channel)
-                }
-
-                let provider = channel as! SocketOptionProvider
-
-                switch targetInterface.interface.address {
-                case .v4(let addr):
-                    return provider.setIPMulticastIF(addr.address.sin_addr).map { channel }
-                case .v6:
-                    return provider.setIPv6MulticastIF(CUnsignedInt(targetInterface.interface.interfaceIndex)).map { channel }
-                case .unixDomainSocket:
-                    preconditionFailure("Should not be possible to create a multicast socket on a unix domain socket")
-                }
-            }
-            .then{
-                self.channel = $0
-                return $0.eventLoop.newSucceededFuture(result: $0)
-        }
-    }
-
-    public func close() throws {
-        try self.channel?.close(mode: .all).wait()
+    public func close() -> EventLoopFuture<Void>{
+        return self.channel.close(mode: .all)
     }
 
     public func waitUntilClosed() throws {
