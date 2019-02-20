@@ -134,6 +134,8 @@ public struct DMXChannels {
     init(_ channels: [UInt8]) {
         self.channels = channels
     }
+
+    static let empty = DMXChannels([UInt8](repeating: 0, count: 255))
 }
 
 extension DMXChannels: Collection {

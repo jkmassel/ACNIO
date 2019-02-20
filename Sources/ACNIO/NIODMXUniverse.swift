@@ -131,6 +131,8 @@ public class NIODMXUniverse{
     public func waitUntilClosed() throws {
         try self.channel?.closeFuture.wait()
     }
+
+    public var channelData = DMXChannels.empty
 }
 
 class NIODMXUniverseChannelHandler: ChannelInboundHandler {
@@ -180,6 +182,7 @@ class NIODMXUniverseDelegateHandler: ChannelInboundHandler {
     func channelRead(ctx: ChannelHandlerContext, data: NIOAny) {
         let unwrapped = self.unwrapInboundIn(data)
         guard let universe = self.universe else { return }
+        universe.channelData = unwrapped.channels
         self.delegate.didReceivePacket(on: universe, unwrapped)
     }
 }
