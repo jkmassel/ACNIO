@@ -13,9 +13,7 @@ public struct SACNPacket {
     private let byteBuffer: ByteBuffer
 
     init?(_ data: ByteBuffer) {
-        guard SACNPacket.validate(buffer: data) else { return nil }
         self.byteBuffer = data
-
         guard self.validate() else { return nil }
     }
 
@@ -28,15 +26,11 @@ public struct SACNPacket {
         self.init(buffer)
     }
 
-    private static func validate(buffer: ByteBuffer) -> Bool {
-
-        // Ensure we have the correct number of bytes
-        guard buffer.readableBytesView.count == 638 else { return false }
-
-        return true
-    }
-
     private func validate() -> Bool {
+
+        // Ensure we have the correct number of bytes in the packet
+        guard self.byteBuffer.readableBytesView.count == 638 else { return false }
+
         // Check that the packet header is present and correct
         guard self.packetID == E131_STRING else { return false }
 
