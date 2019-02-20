@@ -14,28 +14,23 @@ public struct SACNPacket {
 
     init?(_ data: ByteBuffer) {
         self.byteBuffer = data
-        guard self.validate() else { return nil }
-    }
-
-    init?(_ data: Data) {
-        
-//        assert(data.count == 638)
-        var buffer = ByteBufferAllocator.init().buffer(capacity: data.count)
-        buffer.write(bytes: data)
-
-        self.init(buffer)
-    }
-
-    private func validate() -> Bool {
-
-        // Ensure we have the correct number of bytes in the packet
-        guard self.byteBuffer.readableBytesView.count == 638 else { return false }
 
         // Check that the packet header is present and correct
-        guard self.packetID == E131_STRING else { return false }
+        guard self.packetID == E131_STRING else { return nil }
 
-        return true
+        /// Ensure this packet is the correct length
+        guard data.readableBytesView.count == 638 else { return nil }
     }
+    
+//    For sending packets!
+//    init?(_ data: Data) {
+//
+//        assert(data.count == 638)
+//        var buffer = ByteBufferAllocator.init().buffer(capacity: data.count)
+//        buffer.write(bytes: data)
+//
+//        self.init(buffer)
+//    }
 
     public var sourceName: String {
         return self.framingLayer
