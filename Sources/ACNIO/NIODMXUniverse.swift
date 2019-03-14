@@ -23,10 +23,6 @@ public class NIODMXUniverse{
 
         let emptyPromise = eventLoop.newSucceededFuture(result: Void())
 
-        guard let channel = channel else {
-            return eventLoop.newSucceededFuture(result: Void())
-        }
-
         return self.removeCurrentDelegate(on: eventLoop)
             .then{
 
@@ -37,7 +33,7 @@ public class NIODMXUniverse{
                 let newHandler = NIODMXUniverseDelegateHandler(delegate: newDelegate)
                 newHandler.universe = self
 
-                return channel.pipeline.add(handler: newHandler)
+                return self.channel!.pipeline.add(handler: newHandler)
             }
     }
 
@@ -142,6 +138,8 @@ class NIODMXUniverseChannelHandler: ChannelInboundHandler {
     private var counter: UInt8 = 255
 
     func channelRead(ctx: ChannelHandlerContext, data: NIOAny) {
+
+        debugPrint("Received Packet")
 
         let unwrapped = self.unwrapInboundIn(data)
 
