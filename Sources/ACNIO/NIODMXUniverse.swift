@@ -129,6 +129,10 @@ public class NIODMXUniverse{
     }
 
     public var channelData = DMXChannels.empty
+
+    deinit {
+        try? self.waitUntilClosed()
+    }
 }
 
 class NIODMXUniverseChannelHandler: ChannelInboundHandler {
