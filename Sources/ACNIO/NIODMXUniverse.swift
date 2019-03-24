@@ -92,7 +92,9 @@ public class NIODMXUniverse{
                 .hopTo(eventLoop: eventLoop)
                 .then { channel -> EventLoopFuture<Channel> in
                     let channel = channel as! MulticastChannel
-                    return channel.joinGroup(multicastGroup).map{ channel }
+                    return channel
+                        .joinGroup(multicastGroup, interface: self.interface?.interface)
+                        .map{ channel }
                 }
                 .then { channel -> EventLoopFuture<Channel> in
                     guard let targetInterface = self.interface else {
