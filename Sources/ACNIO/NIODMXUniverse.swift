@@ -99,6 +99,8 @@ public class NIODMXUniverse{
                         return channel.eventLoop.newSucceededFuture(result: channel)
                     }
 
+                    debugPrint("Connecting on interface: \(targetInterface.interface.name)")
+
                     let provider = channel as! SocketOptionProvider
 
                     switch targetInterface.interface.address {
