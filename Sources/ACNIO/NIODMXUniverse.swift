@@ -96,24 +96,27 @@ public class NIODMXUniverse{
                         .joinGroup(multicastGroup, interface: self.interface?.interface)
                         .map{ channel }
                 }
-                .then { channel -> EventLoopFuture<Channel> in
-                    guard let targetInterface = self.interface else {
-                        return channel.eventLoop.newSucceededFuture(result: channel)
-                    }
-
-                    debugPrint("Connecting on interface: \(targetInterface.interface.name)")
-
-                    let provider = channel as! SocketOptionProvider
-
-                    switch targetInterface.interface.address {
-                    case .v4(let addr):
-                        return provider.setIPMulticastIF(addr.address.sin_addr).map { channel }
-                    case .v6:
-                        return provider.setIPv6MulticastIF(CUnsignedInt(targetInterface.interface.interfaceIndex)).map { channel }
-                    case .unixDomainSocket:
-                        preconditionFailure("Should not be possible to create a multicast socket on a unix domain socket")
-                    }
-                }
+//                .then { channel -> EventLoopFuture<Channel> in
+//                    guard let targetInterface = self.interface else {
+//                        return channel.eventLoop.newSucceededFuture(result: channel)
+//                    }
+//
+//                    debugPrint("Connecting on interface: \(targetInterface.interface.name)")
+//
+//                    let provider = channel as! SocketOptionProvider
+//
+//                    switch targetInterface.interface.address {
+//                    case .v4(let addr):
+//                        return provider
+//                            .setIPMulticastIF(addr.address.sin_addr)
+//                            .set
+//                            .map { channel }
+//                    case .v6:
+//                        return provider.setIPv6MulticastIF(CUnsignedInt(targetInterface.interface.interfaceIndex)).map { channel }
+//                    case .unixDomainSocket:
+//                        preconditionFailure("Should not be possible to create a multicast socket on a unix domain socket")
+//                    }
+//                }
                 .then{
                     self.channel = $0
                     return $0.eventLoop.newSucceededFuture(result: $0)
