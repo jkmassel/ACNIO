@@ -1,12 +1,17 @@
 import NIO
 
+public protocol NIODMXConformable {
+    var number: DMXUniverseNumber { get }
+    var channelData: DMXChannels { get }
+}
+
 public protocol NIODMXUniverseDelegate {
-    func didReceivePacket(on universe: NIODMXUniverse, _ packet: SACNPacket)
+    func didReceivePacket(on universe: NIODMXConformable, _ packet: SACNPacket)
 }
 
 public typealias PortNumber = UInt16
 
-public class NIODMXUniverse{
+public class NIODMXUniverse: NIODMXConformable{
 
     let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
     let bootstrap: DatagramBootstrap
