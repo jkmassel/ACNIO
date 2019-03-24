@@ -120,11 +120,21 @@ public struct SACNPacket {
 public struct DMXChannels {
     internal var channels: [UInt8]
 
-    init(_ channels: [UInt8]) {
+    public init(_ channels: [UInt8]) {
         self.channels = channels
     }
 
-    static let empty = DMXChannels([UInt8](repeating: 0, count: 255))
+    subscript(index: Int) -> UInt8 {
+        get{
+            return self.channels[index]
+        }
+    }
+
+    public mutating func setValue(_ value: UInt8, forChannel channel: Int) {
+        self.channels[channel] = value
+    }
+
+    public static let empty = DMXChannels([UInt8](repeating: 0, count: 255))
 }
 
 extension DMXChannels: Collection {
