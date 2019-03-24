@@ -143,7 +143,7 @@ class NIODMXUniverseChannelHandler: ChannelInboundHandler {
 
     func channelRead(ctx: ChannelHandlerContext, data: NIOAny) {
 
-        debugPrint("Received Packet")
+//        debugPrint("Received Packet")
 
         let unwrapped = self.unwrapInboundIn(data)
 
